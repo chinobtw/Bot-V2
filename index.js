@@ -3345,7 +3345,7 @@ function buildMenu({ botName, system, user, totalCommands }) {
 > Uso: /mf <link> | respondiendo a un mensaje con el link
 │
 │ $ /getrepo | /git - Bajar la rama main de un repositorio de GitHub (.zip)
-> Uso: /git usuario/repo
+> Uso: /git usuario/repo | /git -list usuario (lista sus repos)
 │
 │ $ /apk - Buscar y descargar un APK (Aptoide y F-Droid, hasta 20 resultados)
 > Uso: /apk <app> y después respondé a la lista con el número (1 a 20)
@@ -5498,13 +5498,42 @@ function gitParse(arg) {   // "usuario/repo", "github.com/usuario/repo", "https:
   const nombre = `${p[0]}/${p[1].replace(/\.git$/i, '')}`;
   return GIT_NOMBRE.test(nombre) &&!/^\.+$/.test(nombre.split('/')[1])? nombre : null;
 }
+const GIT_USER = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/, GIT_POR_PAG = 15;
+const gitHace = ms => { const h = ms / 3600e3, d = h / 24; return h < 1? 'hace menos de 1 h' : h < 24? `hace ${Math.floor(h)} h` : d < 30? `hace ${Math.floor(d)} d` : d < 365? `hace ${Math.floor(d / 30)} mes${Math.floor(d / 30) === 1? '' : 'es'}` : `hace ${Math.floor(d / 365)} año${Math.floor(d / 365) === 1? '' : 's'}`; };
+// /git -list usuario [página]: repos públicos del usuario (los 100 más recientes), 15 por página
+async function gitLista(m, jid, args) {
+  const reply = t => sock.sendMessage(jid, { text: t }, { quoted: m });
+  const p = args.trim().split(/\s+/).filter(Boolean);
+  let usuario = (p[0] || '').replace(/^https?:\/\/(?:www\.)?github\.com\//i, '').replace(/^github\.com\//i, '').split(/[/?#]/)[0];
+  const pagina = Math.max(1, parseInt(p[1]) || 1);
+  if (!GIT_USER.test(usuario)) return reply('Uso:\n/git -list usuario\n/git -list usuario 2 (página)');
+  const reaccion = t => sock.sendMessage(jid, { react: { text: t, key: m.key } }).catch(() => {});
+  await reaccion('⏳');
+  try {
+    const r = await axios.get(`https://api.github.com/users/${usuario}/repos`, { timeout: 15000, params: { per_page: 100, sort: 'pushed', type: 'owner' },
+      headers: { 'User-Agent': TT_UA, Accept: 'application/vnd.github+json', ...(process.env.GITHUB_TOKEN? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}) } });
+    const repos = Array.isArray(r.data)? r.data : [];
+    if (!repos.length) return reply(`📭 *${usuario}* no tiene repositorios públicos.`);
+    const total = Math.ceil(repos.length / GIT_POR_PAG), pg = Math.min(pagina, total), ini = (pg - 1) * GIT_POR_PAG;
+    const lineas = repos.slice(ini, ini + GIT_POR_PAG).map((x, i) => {
+      const desc = String(x.description || '').replace(/\s+/g, ' ').trim(), meta = [x.language, x.stargazers_count? `⭐ ${x.stargazers_count}` : '', x.pushed_at? gitHace(Date.now() - Date.parse(x.pushed_at)) : '', x.fork? 'fork' : '', x.archived? 'archivado' : ''].filter(Boolean).join(' · ');
+      return `*${ini + i + 1}.* ${x.full_name}${meta? `\n> ${meta}` : ''}${desc? `\n> ${desc.length > 90? desc.slice(0, 89) + '…' : desc}` : ''}`;
+    });
+    return reply(`📚 *Repos de ${repos[0].owner?.login || usuario}* (${repos.length}${repos.length >= 100? '+' : ''} públicos, del más reciente al más viejo)\n\n${lineas.join('\n\n')}\n\n> Página ${pg}/${total}${pg < total? ` · /git -list ${usuario} ${pg + 1} para la siguiente` : ''}\n> Para bajar uno: /git usuario/repo`);
+  } catch (e) {
+    const st = e.response?.status; console.error('[git] lista ERROR', st || '', e.message);
+    return reply(st === 404? `❌ No existe el usuario *${usuario}* en GitHub.` : st === 403 || st === 429? '⏳ GitHub limitó los pedidos desde este hosting (son 60 por hora). Probá de nuevo en un rato.' : '❌ No pude traer los repositorios. Probá de nuevo en un rato');
+  } finally { reaccion(''); }
+}
 async function gitCmd(m, jid, text) {
   const reply = t => sock.sendMessage(jid, { text: t }, { quoted: m });
   const arg = text.replace(/^\/\S+\s*/, '').trim();
+  const lista = /^-(?:list|lista)(?:\s+([\s\S]*))?$/i.exec(arg);
+  if (lista) return gitLista(m, jid, lista[1] || '');
   const q = m.message.extendedTextMessage?.contextInfo?.quotedMessage;
   const qt = q? (q.conversation || q.extendedTextMessage?.text || '') : '';
   const repo = gitParse(arg) || (!arg && gitParse((qt.match(/github\.com\/[^\s<>"']+/i) || [])[0]));
-  if (!repo) return reply('Uso:\n/git usuario/repo\n/getrepo usuario/repo\n(también sirve el link del repositorio)');
+  if (!repo) return reply('Uso:\n/git usuario/repo (baja la rama main)\n/git -list usuario (lista sus repos)\n(también sirve el link del repositorio)');
   const reaccion = t => sock.sendMessage(jid, { react: { text: t, key: m.key } }).catch(() => {});
   await reaccion('⏳');
   fs.mkdirSync(TT_DIR, { recursive: true });

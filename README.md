@@ -33,6 +33,7 @@ Las del panel tienen prioridad sobre el `.env`.
 | `YT_COOKIES`, `YTDLP_PATH`, `YT_PROXY` | YouTube con yt-dlp |
 | `COBALT_API`, `COBALT_KEY` | Respaldo de YouTube |
 | `WORKER_URL`, `WORKER_KEY`, `WORKER_MODE` | Descargas en un worker aparte |
+| `GITHUB_TOKEN` | Opcional: sube el límite de `/git -list` de 60 a 5.000 pedidos por hora |
 | `MAX_MB` | Tope de peso de las descargas (200 por defecto) |
 | `MAX_SUBBOTS` | Cantidad máxima de sub-bots |
 | `SERVER_PORT`, `WEB_PORT`, `PORT` | Puerto de la página web |
@@ -46,7 +47,7 @@ Las del panel tienen prioridad sobre el `.env`.
 
 ## Comandos principales
 
-- **Descargas:** `/tt`, `/ytaudio`, `/ytvideo`, `/search`, `/spotify`, `/apk`, `/mf`, `/git`, `/fb`, `/x`, `/ig`, `/pin`
+- **Descargas:** `/tt`, `/ytaudio`, `/ytvideo`, `/search`, `/spotify`, `/apk`, `/mf`, `/git` (`/git usuario/repo` baja la rama main; `/git -list usuario` lista sus repos), `/fb`, `/x`, `/ig`, `/pin`
 - **Stickers y utilidades:** `/s`, `/toimg`, `/setmeta`, `/pfp`
 - **Perfil y nivel:** `/profile`, `/level`, `/top`, `/marry`, `/msgcount`
 - **Economía y apuestas:** `/daily`, `/w`, `/crime`, `/rob`, `/dep`, `/with`, `/pay`, `/rt`, `/cf`, `/bj`, `/maq`

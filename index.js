@@ -3344,6 +3344,9 @@ function buildMenu({ botName, system, user, totalCommands }) {
 │ $ /mf | /mediafire - Descargar un archivo de MediaFire
 > Uso: /mf <link> | respondiendo a un mensaje con el link
 │
+│ $ /getrepo | /git - Bajar la rama main de un repositorio de GitHub (.zip)
+> Uso: /git usuario/repo
+│
 │ $ /apk - Buscar y descargar un APK (Aptoide y F-Droid, hasta 20 resultados)
 > Uso: /apk <app> y después respondé a la lista con el número (1 a 20)
 │
@@ -5486,6 +5489,56 @@ async function mfCmd(m, jid, text) {
   } finally { if (f) fs.rmSync(f, { force: true }); reaccion(''); }
 }
 
+// ---------- /getrepo /git: baja la rama main de un repositorio público de GitHub como .zip ----------
+const GIT_NOMBRE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
+function gitParse(arg) {   // "usuario/repo", "github.com/usuario/repo", "https://github.com/usuario/repo(.git)(/tree/...)" -> "usuario/repo" o null
+  let s = String(arg || '').trim().split(/\s+/)[0].replace(/[)\].,;!?]+$/, '');
+  s = s.replace(/^https?:\/\/(?:www\.)?github\.com\//i, '').replace(/^github\.com\//i, '').replace(/^\/+/, '');
+  const p = s.split(/[/?#]/).filter(Boolean); if (p.length < 2) return null;
+  const nombre = `${p[0]}/${p[1].replace(/\.git$/i, '')}`;
+  return GIT_NOMBRE.test(nombre) &&!/^\.+$/.test(nombre.split('/')[1])? nombre : null;
+}
+async function gitCmd(m, jid, text) {
+  const reply = t => sock.sendMessage(jid, { text: t }, { quoted: m });
+  const arg = text.replace(/^\/\S+\s*/, '').trim();
+  const q = m.message.extendedTextMessage?.contextInfo?.quotedMessage;
+  const qt = q? (q.conversation || q.extendedTextMessage?.text || '') : '';
+  const repo = gitParse(arg) || (!arg && gitParse((qt.match(/github\.com\/[^\s<>"']+/i) || [])[0]));
+  if (!repo) return reply('Uso:\n/git usuario/repo\n/getrepo usuario/repo\n(también sirve el link del repositorio)');
+  const reaccion = t => sock.sendMessage(jid, { react: { text: t, key: m.key } }).catch(() => {});
+  await reaccion('⏳');
+  fs.mkdirSync(TT_DIR, { recursive: true });
+  const f = `${TT_DIR}/git_${Date.now()}_${Math.random().toString(36).slice(2)}.zip`;
+  try {
+    const bajar = rama => ttBajar(`https://codeload.github.com/${repo}/zip/refs/heads/${rama}`, f, 'https://github.com/');
+    let rama = 'main';
+    if (ytEnCola) await reply('⏳ Hay otra descarga en curso. Te toca en un rato.');
+    await ytTurno(async () => {
+      console.log(`[git] bajando ${repo}`);
+      try { await bajar(rama); }
+      catch (e) {
+        if ((e.response?.status || e.status) !== 404) throw e;
+        // no hay rama main: se prueba con la rama principal del repo (por ejemplo master); si ni eso, el repo no existe o es privado
+        const info = await axios.get(`https://api.github.com/repos/${repo}`, { timeout: 15000, headers: { 'User-Agent': TT_UA, Accept: 'application/vnd.github+json' } }).catch(x => { throw Object.assign(new Error('GIT_NO'), { status: x.response?.status }); });
+        rama = info.data?.default_branch;
+        if (!rama || rama === 'main') throw new Error('GIT_NO');
+        await bajar(rama);
+      }
+      const peso = fs.statSync(f).size;
+      if (peso < 1) throw new Error('GIT_NO');
+      const nombre = `${repo.split('/')[1]}-${rama}.zip`, doc = peso <= 40 * 1048576? fs.readFileSync(f) : { url: f };
+      await sock.sendMessage(jid, { document: doc, mimetype: 'application/zip', fileName: nombre, caption: `📦 *${repo}*\n> Rama ${rama} · ${fmtMB(peso)} · GitHub` }, { quoted: m });
+      console.log(`[git] enviado ${nombre} ${fmtMB(peso)}`);
+    });
+  } catch (e) {
+    console.error('[git] ERROR', e.status || e.response?.status || '', e.message);
+    await reply(
+      e.message === 'GRANDE'? `❌ El repositorio pesa más de ${TT_MAX / 1024 / 1024} MB` :
+      e.message === 'GIT_NO' || e.response?.status === 404? '❌ No encontré ese repositorio, o es privado. Solo bajo repos públicos.' :
+      '❌ No pude bajar el repositorio. Revisá el nombre (usuario/repo) y probá de nuevo');
+  } finally { fs.rmSync(f, { force: true }); reaccion(''); }
+}
+
 // ---------- /fb /x /ig /pin: descargas de otras redes (cada una prueba sus fuentes en orden) ----------
 const dec = t => String(t || '').replace(/&amp;/g, '&').replace(/&#x2F;/g, '/').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\\u0026/g, '&').replace(/\\\//g, '/');
 const aleat = arr => arr[Math.floor(Math.random() * arr.length)];
@@ -5756,6 +5809,7 @@ function wCrear(b) {
     yt:   ['pesado',  () => ytCmd(m, jid, text, !!b.audio)],
     apk:  ['pesado',  () => b.a && /^https:\/\/([\w.-]+\.aptoide\.com|f-droid\.org)\//.test(String(b.a.url)) && apkEnviar(m, jid, b.a)],
     mf:   ['pesado',  () => mfCmd(m, jid, text)],
+    git:  ['pesado',  () => gitCmd(m, jid, text)],
   };
   const t = tipos[b.tipo]; if (!t) return null;
   wJobs.set(job.id, job);
@@ -6598,6 +6652,8 @@ async function handleUpsert(messages) {
           await spotifyCmd(m, jid, text);
         } else if (/^\/(mf|mediafire)(\s|$)/i.test(text)) {
           await descargar(m, jid, 'mf', { text }, () => mfCmd(m, jid, text));
+        } else if (/^\/(getrepo|git)(\s|$)/i.test(text)) {
+          await descargar(m, jid, 'git', { text }, () => gitCmd(m, jid, text));
         } else if (/^\/apk(\s|$)/i.test(text)) {
           await apkCmd(m, jid, text);
         } else if (/^\/(fb|facebook)(\s|$)/i.test(text)) {

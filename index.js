@@ -939,7 +939,7 @@ const SOC = {
 
   // ---------- utilidades ----------
   async toimg(c) {
-    if (!sharp) return c.reply('⚠️ Falta instalar el paquete sharp (npm i sharp)');
+    if (!sharp) { console.error('[sharp] falta el paquete (npm i sharp)'); return c.reply('❌ No pude procesar la imagen ahora. Probá de nuevo más tarde'); }
     const ctx = modCtx(c.m), q = ctx?.quotedMessage;
     const base = socDesenvolver(q || c.m.message);
     const tipo = base.stickerMessage? 'stickerMessage' : base.imageMessage? 'imageMessage' : base.videoMessage? 'videoMessage' : null;
@@ -1136,7 +1136,7 @@ const SOC = {
   },
   async setpfp(c) {
     if (!(await puedePersonalizar(c.m, c.jid))) return c.reply('⛔ Solo el dueño del bot puede personalizarlo');
-    if (!sharp) return c.reply('⚠️ Falta instalar el paquete sharp (npm i sharp)');
+    if (!sharp) { console.error('[sharp] falta el paquete (npm i sharp)'); return c.reply('❌ No pude procesar la imagen ahora. Probá de nuevo más tarde'); }
     const ctx = modCtx(c.m), q = ctx?.quotedMessage;
     const fuente = c.m.message.imageMessage? c.m : q?.imageMessage? { key: { remoteJid: c.jid, id: ctx.stanzaId, participant: ctx.participant }, message: q } : null;
     if (!fuente) return c.reply('Mandá una foto con el texto /setpfp, o respondé a una foto con /setpfp');
@@ -1804,7 +1804,7 @@ async function webApi(req, res, path) {
     return jsonRes(res, 200, {
       nombre: nameOfId('main'), online: ids.filter(id => instances.get(id)?.online).length, total: ids.length,
       grupos: gs.length? gs.reduce((a, b) => a + b, 0) : null,
-      comandos: countCmds(buildMenu({ botName: '', system: '', user: '', totalCommands: 0 })),
+      comandos: countCmds(buildMenu({ botName: '', system: '', user: '', totalCommands: 0, owner: true })),
       uptime: Math.floor(process.uptime()), usados: Object.keys(subReg).length, max: MAX_SUBBOTS,
     });
   }
@@ -3299,7 +3299,7 @@ function startWeb() {
 }
 
 // ---------- menú ----------
-function buildMenu({ botName, system, user, totalCommands }) {
+function buildMenu({ botName, system, user, totalCommands, owner }) {
   return `◈ ━━━━━━ ◈ ${botName} ◈ ━━━━━━ ◈
 
 ⟐  SYSTEM :: ${system}‌‌‍‌‌‌‌‌‌‍‌‌‌‌‍‌‌‌‌‌‌‍‌‌‌‌‍‌‌‌‌‌‌‍‌‌‌‌‍‌‌‌‌‍‌‌‌‌‌‍‌‌‌‌‌‍‌‌‌‌‍‌‌‌‌‌‌‍‌‌‌‌‌‍‌‌‌‌‌‌‍‌‌‌‌‍‌‌‌‌‌‌‍‌‌‌‌‍‌‌‌‌‌‌‍‌‌‌‌‌‍‌‌‌‌‌‍‌‌‌‌‍‌‌‌‌‌‍‌‌‌‌‌‍‌‌‌‌‌‍‌‌‌‍‌‌‌‌‍‌‌‌‌‌‌‍‌‌
@@ -3317,7 +3317,6 @@ function buildMenu({ botName, system, user, totalCommands }) {
 │ • /infobot | /bot | /botinfo - Información del bot
 │
 │ • /menu | /? | /help | /comandos - Este listado
-> Varios bots en un grupo: si cada uno tiene un prefijo distinto, alcanza con el prefijo (ej: /help para uno, #help para el otro). Si comparten prefijo, hace falta la inicial del nombre: J/s responde el bot que empieza con J, P/s el que empieza con P. Sin inicial responde el más viejo.
 ╰───────────
 
 ╭─[ ✧ MEDIA DOWNLOADER ]
@@ -3670,7 +3669,7 @@ function buildMenu({ botName, system, user, totalCommands }) {
 │ $ /nsfwclassic - Clásico
 │ $ /nsfwrandom - Al azar
 > Uso: /nsfwhentai (o /nsfwhentai @usuario). Sin etiqueta, la imagen es solo tuya
-╰───────────
+╰───────────${owner? `
 
 ╭─[ ✧ OWNER ]
 │ $ /say texto - El bot envía el texto
@@ -3690,7 +3689,7 @@ function buildMenu({ botName, system, user, totalCommands }) {
 │ $ /delsub número - Eliminar un sub-bot
 │
 │ $ /backup - Backup a tu privado
-╰───────────
+╰───────────` : ''}
 
 ⚠  Powered by Vand4lw | ${totalCommands} cmds
 ─── ✦ ─── ✦ ─── ✦ ───`;
@@ -3705,7 +3704,7 @@ const countCmds = txt => txt.split('\n').filter(l => l.startsWith('│'))
 
 async function sendMenu(m, jid) {
   const sender = m.key.participant || (m.key.fromMe? `${num(sock.user?.id)}@s.whatsapp.net` : jid);
-  const base = { botName: botName(), system: ctxBot().id === 'main'? 'Main-Bot' : 'Sub-Bot', user: num(sender), totalCommands: 0 };
+  const base = { botName: botName(), system: ctxBot().id === 'main'? 'Main-Bot' : 'Sub-Bot', user: num(sender), totalCommands: 0, owner: await isOwner(m, jid) };
   const totalCommands = countCmds(buildMenu(base));
   const px = prefijo(), menu = buildMenu({...base, totalCommands });
   const content = { text: px === '/'? menu : menu.replace(/\/(?=[\p{L}?])/gu, px), mentions: [sender] }; // el menú muestra el prefijo del bot
@@ -3816,7 +3815,7 @@ async function subCmd(m, jid, text) {
   const modo = /^\/qr/i.test(text)? 'qr' : 'code';
   const enGrupo = jid.endsWith('@g.us');
   if (ctxBot().id!== 'main') return reply('Solo el bot principal puede crear sub-bots');
-  if (modo === 'qr' &&!QRCode) return reply('⚠️ Falta instalar el paquete qrcode (npm i qrcode). Mientras tanto usá /code');
+  if (modo === 'qr' &&!QRCode) { console.error('[qr] falta el paquete qrcode (npm i qrcode)'); return reply('❌ No pude generar el QR ahora. Probá con /code'); }
 
   const numero = (await detectarNumero(m, jid).catch(() => '')) || (text.trim().split(/\s+/)[1] || '').replace(/\D/g, '');
   if (numero.length < 8) return reply(`No pude detectar tu número. Probá por privado o usá: /${modo} 5493331234567`);
@@ -3947,7 +3946,7 @@ function stickerHijo(padre, m, jid) {
 
 async function stickerCmd(m, jid) {
   const reply = t => sock.sendMessage(jid, { text: t }, { quoted: m });
-  if (!sharp) return reply('⚠️ Falta instalar el paquete sharp (npm i sharp)');
+  if (!sharp) { console.error('[sharp] falta el paquete (npm i sharp)'); return reply('❌ No pude crear el sticker ahora. Probá de nuevo más tarde'); }
   const ctx = m.message.extendedTextMessage?.contextInfo;
   const q = ctx?.quotedMessage;
   const orden = i => i.m.message?.messageContextInfo?.messageAssociation?.messageIndex?? 0;
@@ -4096,7 +4095,7 @@ async function geminiCmd(m, jid, text) {
   if (gem.off[kc]) return reply('😴 Gemini está desactivado en este chat (/gemini on para activarlo)');
 
   const key = geminiKey();
-  if (!key) return reply('⚠️ Falta la variable GEMINI_API_KEY (o GOOGLE_API_KEY) en el hosting');
+  if (!key) { console.error('[gemini] falta GEMINI_API_KEY (o GOOGLE_API_KEY)'); return reply('❌ La IA no está disponible ahora. Probá más tarde'); }
 
   const km = `${kc}|${senderIds(m, jid)[0]}`;
   if (/^(reset|olvidar)$/.test(sub)) { delete gem.mem[km]; saveGem(); return reply('🧹 Listo, me olvidé de lo que hablamos'); }
@@ -4125,10 +4124,7 @@ async function geminiCmd(m, jid, text) {
     const st = e.response?.status, msg = e.response?.data?.error?.message || e.message;
     console.error('[gemini]', st, msg);
     if (st === 429) return reply('⏳ Se alcanzó el límite gratuito de Gemini (por minuto o por día). Probá en un rato');
-    if (st === 400 && /API key/i.test(msg)) return reply('⚠️ La API key de Gemini no es válida');
-    if (st === 403) return reply('⚠️ La API key de Gemini no tiene permiso (o no está habilitada en tu región)');
-    if (st === 404) return reply(`⚠️ El modelo "${GEM_MODEL}" no existe. Cambialo con la variable GEMINI_MODEL`);
-    await reply(`❌ Error de Gemini${st? ` (${st})` : ''}, probá de nuevo`);
+    await reply('❌ La IA no está disponible ahora. Probá de nuevo en un rato');
   }
 }
 
@@ -4716,7 +4712,7 @@ async function spotifyCmd(m, jid, text) {
   const qt = q? (q.conversation || q.extendedTextMessage?.text || '') : '';
   const link = (arg.match(SP_RE) || qt.match(SP_RE) || [])[0];
   if (!link &&!arg) return reply('Uso:\n/spotify <link de la canción>\n/spotify <título y artista>\n/spotify (respondiendo a un mensaje con el link)');
-  if (!sylphyOn()) return reply('❌ Falta SYLPHY_KEY en el .env del bot');
+  if (!sylphyOn()) { console.error('[sylphy] falta SYLPHY_KEY'); return reply('❌ Este comando no está disponible ahora'); }
   const reaccion = t => sock.sendMessage(jid, { react: { text: t, key: m.key } }).catch(() => {});
   await reaccion('⏳');
   let it;
@@ -4736,7 +4732,7 @@ async function spotifyCmd(m, jid, text) {
   } catch (e) {
     console.error('[spotify] ERROR', e.message);
     await reply(e.sin? '🔎 No encontré nada con esa búsqueda' : e.message === 'GRANDE'? `❌ El archivo pesa más de ${TT_MAX / 1024 / 1024} MB`
-      : /403|401|certificate|altnames|5\d\d/.test(e.message)? '❌ La API de Spotify no está respondiendo ahora (falla del lado de Sylphy). Probá en un rato' : '❌ No pude descargarlo. Revisá el link y probá de nuevo');
+      : /403|401|certificate|altnames|5\d\d/.test(e.message)? '❌ Spotify no responde ahora. Probá en un rato' : '❌ No pude descargarlo. Revisá el link y probá de nuevo');
   } finally { if (it?.archivo) fs.rmSync(it.archivo, { force: true }); reaccion(''); }
 }
 
@@ -4883,7 +4879,7 @@ async function rxCmd(m, jid, text) {
   const def = RX[nombre]; if (!def) return;
   const [emoji, tipo, prim, sec] = def;
   const reply = t => sock.sendMessage(jid, { text: t }, { quoted: m });
-  if (!(await ytTieneFfmpeg())) return reply('⚠️ Este hosting no tiene ffmpeg, así que no puedo convertir el GIF. Las reacciones necesitan ffmpeg');
+  if (!(await ytTieneFfmpeg())) { console.error('[reaccion] el host no tiene ffmpeg'); return reply('❌ No pude mandar la reacción ahora. Probá más tarde'); }
   if (rxEnCurso >= 5) return reply('⏳ Hay muchas reacciones en cola, probá de nuevo en un momento');
   const reaccion = t => sock.sendMessage(jid, { react: { text: t, key: m.key } }).catch(() => {});
   rxEnCurso++;
@@ -4912,9 +4908,9 @@ async function rxCmd(m, jid, text) {
   } catch (e) {
     console.error('[reaccion]', nombre, e.message);
     const st = e.response?.status;
-    await reply(st === 429? '⏳ NekosBest está limitando las consultas. Probá en un rato'
-      : st === 404? '❌ Esa reacción no está disponible en NekosBest ahora'
-      : /ffmpeg/i.test(e.message + (e.stderr || ''))? '❌ No pude convertir el GIF con ffmpeg'
+    await reply(st === 429? '⏳ Hay muchas consultas ahora. Probá en un rato'
+      : st === 404? '❌ Esa reacción no está disponible ahora'
+      : /ffmpeg/i.test(e.message + (e.stderr || ''))? '❌ No pude mandar la reacción. Probá de nuevo en un rato'
       : '❌ No pude mandar la reacción. Probá de nuevo en un rato');
   } finally { rxEnCurso--; reaccion(''); }
 }
@@ -5142,7 +5138,7 @@ async function r34Cmd(m, jid, text) {
   const citado = q ? (q.conversation || q.extendedTextMessage?.text || '') : '';
   const query = (text.replace(/^\/\S+\s*/, '').trim() || citado).trim();   // el texto del comando o, si no hay, el del mensaje citado
   if (!query) return reply('Uso: /r34 <búsqueda>\n> Ejemplo: /r34 Rias_Gremory\n> También podés responder a un mensaje con /r34');
-  if (!sylphyOn()) return reply('❌ Falta SYLPHY_KEY en el .env del bot');
+  if (!sylphyOn()) { console.error('[sylphy] falta SYLPHY_KEY'); return reply('❌ Este comando no está disponible ahora'); }
   const reaccion = t => sock.sendMessage(jid, { react: { text: t, key: m.key } }).catch(() => {});
   await reaccion('⏳');
   try {
@@ -5163,8 +5159,8 @@ async function r34Cmd(m, jid, text) {
     console.error('[r34] ERROR', e.message);
     await reply(e.sin ? '🔎 No encontré nada con esa búsqueda'
       : /-> 429/.test(e.message) ? '⏳ Se están limitando las consultas. Probá en un rato'
-      : /-> (401|403)/.test(e.message) ? '❌ Se rechazó la consulta (clave inválida o sin permiso). Revisá SYLPHY_KEY'
-      : /certificate|altnames|-> 5\d\d|ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|timeout/i.test(e.message) ? '❌ La API de Sylphy no responde ahora. Probá en un rato'
+      : /-> (401|403)/.test(e.message) ? '❌ Este comando no está disponible ahora'
+      : /certificate|altnames|-> 5\d\d|ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|timeout/i.test(e.message) ? '❌ El servicio no responde ahora. Probá en un rato'
       : e.message === 'no pude bajar ninguna imagen' ? '❌ No pude bajar las imágenes (el sitio las bloquea o no responden). Probá en un rato'
       : '❌ No pude procesarlo. Probá de nuevo en un rato');
   } finally { reaccion(''); }
@@ -5281,9 +5277,9 @@ async function ytCmd(m, jid, text, audio) {
     await reply(
       e.message === 'GRANDE'? `❌ El archivo pesa más de ${TT_MAX / 1024 / 1024} MB` :
       e.message === 'SIN_RESULTADOS'? '🔎 No encontré nada con esa búsqueda' :
-      /Sign in to confirm|not a bot/i.test(raw)? '❌ YouTube bloqueó la IP del hosting ("confirmá que no sos un bot"). Configurá YT_COOKIES o COBALT_API en el .env.' :
+      /Sign in to confirm|not a bot/i.test(raw)? '❌ YouTube no me dejó descargarlo ahora. Probá de nuevo en un rato' :
       /Private video|members-only|Sign in to confirm your age|age-restricted/i.test(raw)? '❌ Ese video es privado o tiene restricción de edad.' :
-      /ENOENT|EACCES|ENOEXEC|spawn/i.test(raw)? '❌ No pude ejecutar yt-dlp en este hosting. Mirá la consola.' :
+      /ENOENT|EACCES|ENOEXEC|spawn/i.test(raw)? '❌ No pude descargarlo ahora. Probá de nuevo en un rato' :
       '❌ No pude descargarlo. Revisá que el link sea público y probá de nuevo');
   } finally {
     if (it?.archivo) fs.rmSync(it.archivo, { force: true });
@@ -5522,7 +5518,7 @@ async function gitLista(m, jid, args) {
     return reply(`📚 *Repos de ${repos[0].owner?.login || usuario}* (${repos.length}${repos.length >= 100? '+' : ''} públicos, del más reciente al más viejo)\n\n${lineas.join('\n\n')}\n\n> Página ${pg}/${total}${pg < total? ` · /git -list ${usuario} ${pg + 1} para la siguiente` : ''}\n> Para bajar uno: /git usuario/repo`);
   } catch (e) {
     const st = e.response?.status; console.error('[git] lista ERROR', st || '', e.message);
-    return reply(st === 404? `❌ No existe el usuario *${usuario}* en GitHub.` : st === 403 || st === 429? '⏳ GitHub limitó los pedidos desde este hosting (son 60 por hora). Probá de nuevo en un rato.' : '❌ No pude traer los repositorios. Probá de nuevo en un rato');
+    return reply(st === 404? `❌ No existe el usuario *${usuario}* en GitHub.` : st === 403 || st === 429? '⏳ GitHub limitó los pedidos. Probá de nuevo en un rato.' : '❌ No pude traer los repositorios. Probá de nuevo en un rato');
   } finally { reaccion(''); }
 }
 async function gitCmd(m, jid, text) {
@@ -5843,8 +5839,7 @@ async function redCmd(m, jid, text, clave) {
       e.message === 'SIN_RESULTADOS'? '🔎 No encontré resultados con esa búsqueda' :
       e.message === 'SIN_MEDIA'? '🤷 Ese post no tiene fotos ni videos que pueda bajar' :
       e.message === 'LINK_INVALIDO'? `❌ Ese link no parece ser de ${c.nombre}` :
-      e.message === 'PIN_LOGIN'? '🔒 Pinterest rechazó el pedido. Probá cargar tus cookies en pin_cookies.txt (o PIN_COOKIES=ruta en el .env). Si ya las tenés, puede haber cambiado su web: actualizá PIN_APP_VERSION.' :
-      e.message === 'PIN_COOKIES'? '🔒 Pinterest rechazó el pedido, con y sin cookies. Puede haber cambiado su web (actualizá PIN_APP_VERSION en el .env) o las cookies vencieron (exportalas de nuevo en pin_cookies.txt: el bot las vuelve a leer solo).' :
+      (e.message === 'PIN_LOGIN' || e.message === 'PIN_COOKIES')? (console.error('[pin] Pinterest rechazó el pedido: cargá/renová pin_cookies.txt (o PIN_COOKIES) o actualizá PIN_APP_VERSION'), '🔒 Pinterest no me dejó acceder ahora. Probá de nuevo en un rato') :
       `❌ No pude descargarlo. Revisá que el link sea público y probá de nuevo`);
   } finally { reaccion(''); }
 }
@@ -6604,7 +6599,7 @@ async function infoBotCmd(m, jid) {
   let grupos = '—';
   try { grupos = Object.keys(await sock.groupFetchAllParticipating()).length; } catch {}
   const online = !!real?.online;
-  const base = { botName: botName(), system: '', user: '', totalCommands: 0 };
+  const base = { botName: botName(), system: '', user: '', totalCommands: 0, owner: true };
   const cmds = countCmds(buildMenu(base));
   const lineas = [
     `◈ *${botName()}* ◈`, '',

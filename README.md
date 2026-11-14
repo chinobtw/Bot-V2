@@ -33,7 +33,8 @@ Las del panel tienen prioridad sobre el `.env`.
 | `YT_COOKIES`, `YTDLP_PATH`, `YT_PROXY` | YouTube con yt-dlp |
 | `COBALT_API`, `COBALT_KEY` | Respaldo de YouTube |
 | `WORKER_URL`, `WORKER_KEY`, `WORKER_MODE` | Descargas en un worker aparte |
-| `PIN_COOKIES` | Ruta del archivo de cookies de Pinterest (por defecto `./pin_cookies.txt`); `/pin` lo necesita para buscar y bajar |
+| `PIN_COOKIES` | Ruta del archivo de cookies de Pinterest (por defecto `./pin_cookies.txt`). Opcional: `/pin` anda sin cookies y las usa si están |
+| `PIN_APP_VERSION` | Versión de la web de Pinterest que manda `/pin` (por defecto `a89153f`); cambiarla si Pinterest empieza a rechazar los pedidos |
 | `GITHUB_TOKEN` | Opcional: sube el límite de `/git -list` de 60 a 5.000 pedidos por hora |
 | `MAX_MB` | Tope de peso de las descargas (200 por defecto) |
 | `MAX_SUBBOTS` | Cantidad máxima de sub-bots |
@@ -42,9 +43,9 @@ Las del panel tienen prioridad sobre el `.env`.
 | `WEB_NOMBRE`, `WEB_CANAL` | Textos de la página y canal oficial |
 | `SHELL_TIMEOUT`, `SHELL_MAX_CHARS`, `SHELL_CHUNK` | Comando `$ <comando>` del dueño |
 
-## Cookies de Pinterest (`/pin`)
+## Cookies de Pinterest (`/pin`, opcionales)
 
-Pinterest pide sesión. Guardá tus cookies en `pin_cookies.txt`, al lado de `index.js`, en cualquiera de estos formatos: `cookies.txt` (Netscape), JSON exportado del navegador, o el encabezado `Cookie: a=b; c=d`. Tienen que incluir `_pinterest_sess` y `csrftoken`. El bot vuelve a leer el archivo solo cuando cambia. **No subas ese archivo al repo** (está en `.gitignore`).
+`/pin` anda sin cookies. Si querés usar tu sesión, guardá las cookies en `pin_cookies.txt`, al lado de `index.js`, en cualquiera de estos formatos: `cookies.txt` (Netscape), JSON exportado del navegador, o el encabezado `Cookie: a=b; c=d`. El bot vuelve a leer el archivo solo cuando cambia, y si Pinterest rechaza las cookies sigue sin ellas. **No subas ese archivo al repo** (está en `.gitignore`).
 
 ## Archivos que genera el bot
 

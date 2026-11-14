@@ -5598,9 +5598,10 @@ async function redX(link) {
 }
 
 // --- Pinterest (link o búsqueda), con tus cookies ---
-// Pinterest ya no deja buscar ni leer pins sin sesión: poné tus cookies en ./pin_cookies.txt (o PIN_COOKIES=ruta en el .env).
-// Sirve el cookies.txt de siempre (formato Netscape), un JSON exportado del navegador o el encabezado "Cookie: a=b; c=d" pegado tal cual.
-// El archivo se vuelve a leer solo cuando cambia (no hace falta reiniciar el bot). Solo se usan las cookies de pinterest.*
+// La API web de Pinterest rechaza ("Invalid Resource Request") los pedidos que no traen los encabezados de su propia página (X-APP-VERSION, PWS-Handler, Sec-Fetch-*).
+// Con eso anda hasta sin sesión; las cookies son opcionales (./pin_cookies.txt o PIN_COOKIES=ruta en el .env) y se usan si están. Si Pinterest las rechaza, se reintenta sin ellas.
+// Sirve el cookies.txt de siempre (formato Netscape), un JSON exportado del navegador o el encabezado "Cookie: a=b; c=d" pegado tal cual. El archivo se vuelve a leer solo cuando cambia.
+// X-APP-VERSION es el número de versión de la web de Pinterest (cambia con sus actualizaciones): se puede cambiar con PIN_APP_VERSION en el .env.
 const pinDominio = d => /(^|\.)pinterest\.[a-z.]+$/i.test(String(d || '').replace(/^\./, ''));
 function pinCookiesParse(raw) {
   const v = new Map(), ahora = Date.now() / 1000;
@@ -5632,20 +5633,36 @@ function pinCookies() {
   console.log(`[pin] cookies de ${f}: ${pinCk.n}${pinCk.sesion? ' (con sesión)' : ' (SIN _pinterest_sess: no alcanza para iniciar sesión)'}`);
   return pinCk;
 }
-function pinHeaders(fuente, api) {
-  const ck = pinCookies();
+function pinHeaders(api, anonimo) {
+  const ck = anonimo? { h: 'csrftoken=' + crypto.randomBytes(16).toString('hex'), csrf: '' } : pinCookies();
   return { 'User-Agent': YT_UA_PC, 'Accept-Language': 'en-US,en;q=0.9', Referer: 'https://www.pinterest.com/',
-    ...(api? { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json, text/javascript, */*; q=0.01', 'X-Pinterest-AppState': 'active', 'X-Pinterest-Source-Url': fuente || '/', ...(ck.csrf? { 'X-CSRFToken': ck.csrf } : {}) } : { Accept: 'text/html,application/xhtml+xml' }),
+    ...(api? {
+      Accept: 'application/json, text/javascript, */*, q=0.01', 'X-Requested-With': 'XMLHttpRequest', 'X-APP-VERSION': process.env.PIN_APP_VERSION || 'a89153f',
+      'X-Pinterest-AppState': 'active', 'X-Pinterest-PWS-Handler': 'www/[username].js', 'Sec-Fetch-Dest': 'empty', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Site': 'same-origin',
+      ...(ck.csrf? { 'X-CSRFToken': ck.csrf } : {}),
+    } : { Accept: 'text/html,application/xhtml+xml' }),
     ...(ck.h? { Cookie: ck.h } : {}) };
 }
-// Pinterest rechazó el pedido por falta de sesión: se distingue "no hay cookies" de "las cookies no sirven"
+// pide con las cookies (si hay); si Pinterest las rechaza, reintenta una vez sin sesión antes de rendirse
+let pinAvisoCk = false;
+async function pinReq(url, api) {
+  const ck = pinCookies();
+  try { return await redGet(url, { headers: pinHeaders(api, !ck.h) }); }
+  catch (e) {
+    const st = e.response?.status;
+    if (ck.h && (st === 401 || st === 403)) {
+      try { const r = await redGet(url, { headers: pinHeaders(api, true) }); if (!pinAvisoCk) { pinAvisoCk = true; console.error('[pin] Pinterest rechazó tus cookies: sigo sin sesión (revisá pin_cookies.txt)'); } return r; } catch {}
+    }
+    throw e;
+  }
+}
+// Pinterest rechazó el pedido (también sin sesión): se distingue "no hay cookies" de "las cookies no sirven"
 const pinAuth = e => { const st = e.response?.status; if (st !== 401 && st !== 403) return null; return new Error(pinCookies().sesion? 'PIN_COOKIES' : 'PIN_LOGIN'); };
-const pinApi = async (recurso, opciones, fuente) => {
-  const data = encodeURIComponent(JSON.stringify({ options: opciones, context: {} }));
-  const r = await redGet(`https://www.pinterest.com/resource/${recurso}/get/?source_url=${encodeURIComponent(fuente)}&data=${data}`, { headers: pinHeaders(fuente, true) });
+const pinApi = async (recurso, opciones) => {
+  const r = await pinReq(`https://www.pinterest.com/resource/${recurso}/get/?source_url=&data=${encodeURIComponent(JSON.stringify({ options: opciones }))}`, true);
   return r.data?.resource_response?.data;
 };
-const pinHtml = async url => String((await redGet(url, { headers: pinHeaders(null, false) })).data).replace(/\\\//g, '/');
+const pinHtml = async url => String((await pinReq(url, false)).data).replace(/\\\//g, '/');
 function pinMedia(d) { // datos de un pin -> items
   const items = [];
   const mp4 = vl => Object.values(vl || {}).filter(v => v?.url && /\.mp4(\?|$)/i.test(v.url)).sort((a, b) => (b.width || 0) - (a.width || 0)).map(v => v.url);
@@ -5667,9 +5684,8 @@ async function redPin(link, q) {
   let auth = null;   // si Pinterest pide sesión, se avisa en vez de decir "no encontré"
   if (q) { // búsqueda: una sola imagen, al azar entre las primeras
     let urls = [];
-    const fuente = '/search/pins/?q=' + q;
     try {
-      const d = await pinApi('BaseSearchResource', { query: q, scope: 'pins', page_size: 25, no_fetch_context_on_resource: false }, fuente);
+      const d = await pinApi('BaseSearchResource', { query: q, scope: 'pins', rs: 'typed' });
       urls = (d?.results || []).filter(x => x?.images?.orig?.url &&!x.is_promoted &&!x.promoter).map(x => [x.images.orig.url, x.images['736x']?.url].filter(Boolean));
     } catch (e) { auth = pinAuth(e) || auth; console.error('[pin] búsqueda API falló:', e.response?.status || '', e.message); }
     if (!urls.length) {
@@ -5678,15 +5694,15 @@ async function redPin(link, q) {
         urls = [...new Set([...h.matchAll(/"orig":\{"url":"(https:[^"]+)"/g)].map(x => x[1]))].map(u => [u]);
       } catch (e) { auth = pinAuth(e) || auth; console.error('[pin] búsqueda HTML falló:', e.response?.status || '', e.message); }
     }
-    if (!urls.length) throw auth || (pinCookies().n? new Error('SIN_RESULTADOS') : new Error('PIN_LOGIN'));
+    if (!urls.length) throw auth || new Error('SIN_RESULTADOS');
     return { items: [{ type: 'image', urls: aleat(urls.slice(0, 5)) }], caption: `📌 ${q}` };
   }
   let url = link;
-  if (/pin\.it\//i.test(link)) { const r = await redGet(link, { headers: pinHeaders(null, false) }); url = r.request?.res?.responseUrl || link; }
+  if (/pin\.it\//i.test(link)) { const r = await pinReq(link, false); url = r.request?.res?.responseUrl || link; }
   const id = (url.match(/\/pin\/(?:[^\/?#]*--)?(\d+)/) || [])[1];
   if (!id) throw new Error('LINK_INVALIDO');
   try {
-    const d = await pinApi('PinResource', { id, field_set_key: 'detailed' }, '/pin/' + id + '/');
+    const d = await pinApi('PinResource', { id, field_set_key: 'detailed' });
     const items = d? pinMedia(d) : [];
     if (items.length) return { items, caption: `📌 ${(d.title || d.grid_title || d.description || '').trim()}`.slice(0, 300).trim() };
     throw new Error('sin datos en la API');
@@ -5700,7 +5716,7 @@ async function redPin(link, q) {
     const o = [...new Set([...h.matchAll(/"orig":\{"url":"(https:[^"]+)"/g)].map(x => x[1]))];
     const og = (h.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i) || [])[1];
     const urls = [o[0], og && dec(og).replace('/736x/', '/originals/'), og && dec(og)].filter(Boolean);
-    if (!urls.length) throw auth || new Error(pinCookies().n? 'SIN_MEDIA' : 'PIN_LOGIN');
+    if (!urls.length) throw auth || new Error('SIN_MEDIA');
     return { items: [{ type: 'image', urls }], caption: '📌' };
   }
 }
@@ -5827,8 +5843,8 @@ async function redCmd(m, jid, text, clave) {
       e.message === 'SIN_RESULTADOS'? '🔎 No encontré resultados con esa búsqueda' :
       e.message === 'SIN_MEDIA'? '🤷 Ese post no tiene fotos ni videos que pueda bajar' :
       e.message === 'LINK_INVALIDO'? `❌ Ese link no parece ser de ${c.nombre}` :
-      e.message === 'PIN_LOGIN'? '🔒 Pinterest pide iniciar sesión. Falta cargar las cookies en pin_cookies.txt (o PIN_COOKIES=ruta en el .env).' :
-      e.message === 'PIN_COOKIES'? '🔒 Pinterest rechazó las cookies (vencieron o están mal). Exportalas de nuevo en pin_cookies.txt: el bot las vuelve a leer solo.' :
+      e.message === 'PIN_LOGIN'? '🔒 Pinterest rechazó el pedido. Probá cargar tus cookies en pin_cookies.txt (o PIN_COOKIES=ruta en el .env). Si ya las tenés, puede haber cambiado su web: actualizá PIN_APP_VERSION.' :
+      e.message === 'PIN_COOKIES'? '🔒 Pinterest rechazó el pedido, con y sin cookies. Puede haber cambiado su web (actualizá PIN_APP_VERSION en el .env) o las cookies vencieron (exportalas de nuevo en pin_cookies.txt: el bot las vuelve a leer solo).' :
       `❌ No pude descargarlo. Revisá que el link sea público y probá de nuevo`);
   } finally { reaccion(''); }
 }

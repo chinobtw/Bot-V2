@@ -5597,8 +5597,55 @@ async function redX(link) {
   }
 }
 
-// --- Pinterest (link o búsqueda) ---
-const pinHeaders = { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json, text/javascript, */*; q=0.01' };
+// --- Pinterest (link o búsqueda), con tus cookies ---
+// Pinterest ya no deja buscar ni leer pins sin sesión: poné tus cookies en ./pin_cookies.txt (o PIN_COOKIES=ruta en el .env).
+// Sirve el cookies.txt de siempre (formato Netscape), un JSON exportado del navegador o el encabezado "Cookie: a=b; c=d" pegado tal cual.
+// El archivo se vuelve a leer solo cuando cambia (no hace falta reiniciar el bot). Solo se usan las cookies de pinterest.*
+const pinDominio = d => /(^|\.)pinterest\.[a-z.]+$/i.test(String(d || '').replace(/^\./, ''));
+function pinCookiesParse(raw) {
+  const v = new Map(), ahora = Date.now() / 1000;
+  raw = String(raw || '').replace(/^﻿/, '').trim();
+  if (raw.startsWith('[') || raw.startsWith('{')) {   // JSON del navegador (EditThisCookie, Cookie-Editor...)
+    try {
+      const j = JSON.parse(raw);
+      for (const c of Array.isArray(j)? j : (j.cookies || [])) if (c?.name && pinDominio(c.domain) &&!(c.expirationDate && c.expirationDate < ahora) &&!(c.expires > 0 && c.expires < ahora)) v.set(c.name, String(c.value));
+    } catch {}
+  } else if (raw.includes('\t')) {   // Netscape
+    for (let l of raw.split(/\r?\n/)) {
+      if (l.startsWith('#HttpOnly_')) l = l.slice(10); else if (!l.trim() || l.startsWith('#')) continue;
+      const c = l.split('\t'); if (c.length < 7 ||!pinDominio(c[0])) continue;
+      if (Number(c[4]) > 0 && Number(c[4]) < ahora) continue;   // vencida
+      v.set(c[5], c.slice(6).join('\t').trim());
+    }
+  } else {   // encabezado Cookie crudo
+    for (const p of raw.replace(/^cookie:\s*/i, '').split(/;\s*/)) { const i = p.indexOf('='); if (i > 0) v.set(p.slice(0, i).trim(), p.slice(i + 1).trim()); }
+  }
+  return v;
+}
+let pinCk = { f: '', mt: -1, h: '', csrf: '', n: 0, sesion: false };
+function pinCookies() {
+  const f = process.env.PIN_COOKIES || './pin_cookies.txt';
+  let st; try { st = fs.statSync(f); } catch { return pinCk = { f, mt: -1, h: '', csrf: '', n: 0, sesion: false }; }
+  if (pinCk.f === f && pinCk.mt === st.mtimeMs) return pinCk;
+  let v = new Map(); try { v = pinCookiesParse(fs.readFileSync(f, 'utf8')); } catch (e) { console.error('[pin] no pude leer', f, e.message); }
+  pinCk = { f, mt: st.mtimeMs, h: [...v].map(([k, x]) => `${k}=${x}`).join('; '), csrf: v.get('csrftoken') || '', n: v.size, sesion: v.has('_pinterest_sess') };
+  console.log(`[pin] cookies de ${f}: ${pinCk.n}${pinCk.sesion? ' (con sesión)' : ' (SIN _pinterest_sess: no alcanza para iniciar sesión)'}`);
+  return pinCk;
+}
+function pinHeaders(fuente, api) {
+  const ck = pinCookies();
+  return { 'User-Agent': YT_UA_PC, 'Accept-Language': 'en-US,en;q=0.9', Referer: 'https://www.pinterest.com/',
+    ...(api? { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json, text/javascript, */*; q=0.01', 'X-Pinterest-AppState': 'active', 'X-Pinterest-Source-Url': fuente || '/', ...(ck.csrf? { 'X-CSRFToken': ck.csrf } : {}) } : { Accept: 'text/html,application/xhtml+xml' }),
+    ...(ck.h? { Cookie: ck.h } : {}) };
+}
+// Pinterest rechazó el pedido por falta de sesión: se distingue "no hay cookies" de "las cookies no sirven"
+const pinAuth = e => { const st = e.response?.status; if (st !== 401 && st !== 403) return null; return new Error(pinCookies().sesion? 'PIN_COOKIES' : 'PIN_LOGIN'); };
+const pinApi = async (recurso, opciones, fuente) => {
+  const data = encodeURIComponent(JSON.stringify({ options: opciones, context: {} }));
+  const r = await redGet(`https://www.pinterest.com/resource/${recurso}/get/?source_url=${encodeURIComponent(fuente)}&data=${data}`, { headers: pinHeaders(fuente, true) });
+  return r.data?.resource_response?.data;
+};
+const pinHtml = async url => String((await redGet(url, { headers: pinHeaders(null, false) })).data).replace(/\\\//g, '/');
 function pinMedia(d) { // datos de un pin -> items
   const items = [];
   const mp4 = vl => Object.values(vl || {}).filter(v => v?.url && /\.mp4(\?|$)/i.test(v.url)).sort((a, b) => (b.width || 0) - (a.width || 0)).map(v => v.url);
@@ -5617,42 +5664,43 @@ function pinMedia(d) { // datos de un pin -> items
   return items;
 }
 async function redPin(link, q) {
+  let auth = null;   // si Pinterest pide sesión, se avisa en vez de decir "no encontré"
   if (q) { // búsqueda: una sola imagen, al azar entre las primeras
     let urls = [];
+    const fuente = '/search/pins/?q=' + q;
     try {
-      const data = encodeURIComponent(JSON.stringify({ options: { query: q, scope: 'pins', page_size: 25 }, context: {} }));
-      const r = await redGet(`https://www.pinterest.com/resource/BaseSearchResource/get/?source_url=${encodeURIComponent('/search/pins/?q=' + q)}&data=${data}`, { headers: { 'User-Agent': TT_UA,...pinHeaders } });
-      urls = (r.data?.resource_response?.data?.results || []).filter(x => x?.images?.orig?.url).map(x => [x.images.orig.url, x.images['736x']?.url].filter(Boolean));
-    } catch (e) { console.error('[pin] búsqueda API falló:', e.message); }
+      const d = await pinApi('BaseSearchResource', { query: q, scope: 'pins', page_size: 25, no_fetch_context_on_resource: false }, fuente);
+      urls = (d?.results || []).filter(x => x?.images?.orig?.url &&!x.is_promoted &&!x.promoter).map(x => [x.images.orig.url, x.images['736x']?.url].filter(Boolean));
+    } catch (e) { auth = pinAuth(e) || auth; console.error('[pin] búsqueda API falló:', e.response?.status || '', e.message); }
     if (!urls.length) {
       try {
-        const h = String((await redGet('https://www.pinterest.com/search/pins/?q=' + encodeURIComponent(q))).data).replace(/\\\//g, '/');
+        const h = await pinHtml('https://www.pinterest.com/search/pins/?q=' + encodeURIComponent(q));
         urls = [...new Set([...h.matchAll(/"orig":\{"url":"(https:[^"]+)"/g)].map(x => x[1]))].map(u => [u]);
-      } catch (e) { console.error('[pin] búsqueda HTML falló:', e.message); }
+      } catch (e) { auth = pinAuth(e) || auth; console.error('[pin] búsqueda HTML falló:', e.response?.status || '', e.message); }
     }
-    if (!urls.length) throw new Error('SIN_RESULTADOS');
+    if (!urls.length) throw auth || (pinCookies().n? new Error('SIN_RESULTADOS') : new Error('PIN_LOGIN'));
     return { items: [{ type: 'image', urls: aleat(urls.slice(0, 5)) }], caption: `📌 ${q}` };
   }
   let url = link;
-  if (/pin\.it\//i.test(link)) { const r = await redGet(link); url = r.request?.res?.responseUrl || link; }
+  if (/pin\.it\//i.test(link)) { const r = await redGet(link, { headers: pinHeaders(null, false) }); url = r.request?.res?.responseUrl || link; }
   const id = (url.match(/\/pin\/(?:[^\/?#]*--)?(\d+)/) || [])[1];
   if (!id) throw new Error('LINK_INVALIDO');
   try {
-    const data = encodeURIComponent(JSON.stringify({ options: { id, field_set_key: 'detailed' }, context: {} }));
-    const r = await redGet(`https://www.pinterest.com/resource/PinResource/get/?source_url=${encodeURIComponent('/pin/' + id + '/')}&data=${data}`, { headers: { 'User-Agent': TT_UA,...pinHeaders } });
-    const d = r.data?.resource_response?.data;
+    const d = await pinApi('PinResource', { id, field_set_key: 'detailed' }, '/pin/' + id + '/');
     const items = d? pinMedia(d) : [];
     if (items.length) return { items, caption: `📌 ${(d.title || d.grid_title || d.description || '').trim()}`.slice(0, 300).trim() };
     throw new Error('sin datos en la API');
   } catch (e) {
-    console.error('[pin] API falló, pruebo la página:', e.message);
-    const h = String((await redGet(`https://www.pinterest.com/pin/${id}/`)).data).replace(/\\\//g, '/');
+    auth = pinAuth(e) || auth;
+    console.error('[pin] API falló, pruebo la página:', e.response?.status || '', e.message);
+    let h = '';
+    try { h = await pinHtml(`https://www.pinterest.com/pin/${id}/`); } catch (x) { throw pinAuth(x) || auth || x; }
     const v = [...new Set([...h.matchAll(/https:\/\/v\d*\.pinimg\.com\/videos\/[^"'\\\s]+?\.mp4/g)].map(x => x[0]))];
     if (v.length) return { items: [{ type: 'video', urls: v }], caption: '📌' };
     const o = [...new Set([...h.matchAll(/"orig":\{"url":"(https:[^"]+)"/g)].map(x => x[1]))];
     const og = (h.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i) || [])[1];
     const urls = [o[0], og && dec(og).replace('/736x/', '/originals/'), og && dec(og)].filter(Boolean);
-    if (!urls.length) throw new Error('SIN_MEDIA');
+    if (!urls.length) throw auth || new Error(pinCookies().n? 'SIN_MEDIA' : 'PIN_LOGIN');
     return { items: [{ type: 'image', urls }], caption: '📌' };
   }
 }
@@ -5779,6 +5827,8 @@ async function redCmd(m, jid, text, clave) {
       e.message === 'SIN_RESULTADOS'? '🔎 No encontré resultados con esa búsqueda' :
       e.message === 'SIN_MEDIA'? '🤷 Ese post no tiene fotos ni videos que pueda bajar' :
       e.message === 'LINK_INVALIDO'? `❌ Ese link no parece ser de ${c.nombre}` :
+      e.message === 'PIN_LOGIN'? '🔒 Pinterest pide iniciar sesión. Falta cargar las cookies en pin_cookies.txt (o PIN_COOKIES=ruta en el .env).' :
+      e.message === 'PIN_COOKIES'? '🔒 Pinterest rechazó las cookies (vencieron o están mal). Exportalas de nuevo en pin_cookies.txt: el bot las vuelve a leer solo.' :
       `❌ No pude descargarlo. Revisá que el link sea público y probá de nuevo`);
   } finally { reaccion(''); }
 }

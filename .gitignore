@@ -1,0 +1,15 @@
+# secretos y sesiones
+.env
+cookies.txt
+pin_cookies.txt
+auth/
+subbots/
+# datos que genera el bot
+*.json
+!package.json
+!package-lock.json
+banners/
+bin/
+tmp_tt/
+tmp_worker/
+node_modules/

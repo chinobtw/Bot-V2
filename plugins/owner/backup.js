@@ -1,4 +1,4 @@
-// /backup: zip con el código, los datos, los banners y las sesiones, enviado al dueño
+// /backup: zip con el código y los datos, enviado al dueño
 const fs = require('fs');
 const path = require('path');
 const { OWNER } = require('../../config');
@@ -13,12 +13,11 @@ const { NSFW_FILE } = require('../../src/db/nsfw');
 const { ACT_FILE, GRP_FILE, PERF_FILE, socGuardarTodo } = require('../../src/db/social');
 const { SUB_FILE } = require('../../src/db/subbots');
 const { WL } = require('../../src/db/whitelist');
-const { BANNER_DIR } = require('../../src/lib/banner');
 const { crearZip, listar } = require('../../src/lib/zip');
 const { ctxBot, getMainSock, isOwner, sock } = require('../../src/lib/state');
 
 // ---------- /backup (solo el creador, solo desde el bot principal) ----------
-// Un solo zip con el código, los .json, los banners y las sesiones (auth/ y subbots/). No lleva node_modules, .env ni cookies.
+// Un solo zip con el código y los .json. No lleva auth/, subbots/, banners/, node_modules, .env ni cookies (comprimir tantos archivos tumbaba el host).
 async function backupCmd(m, jid) {
   if (ctxBot().id!== 'main' ||!(await isOwner(m, jid))) return;
   const reply = t => sock.sendMessage(jid, { text: t }, { quoted: m });
@@ -31,7 +30,7 @@ async function backupCmd(m, jid) {
   const entradas = [
     ...['index.js', 'main.js', 'handler.js', 'config.js'].filter(f => fs.existsSync(path.join(raiz, f))).map(f => ({ nombre: f, archivo: path.join(raiz, f) })),
     ...listar(path.join(raiz, 'plugins'), raiz), ...listar(path.join(raiz, 'src'), raiz),
-    ...datos, ...listar(BANNER_DIR, '.'), ...listar('./auth', '.'), ...listar('./subbots', '.'),
+    ...datos,
   ];
   try {
     const r = crearZip(tmp, entradas);

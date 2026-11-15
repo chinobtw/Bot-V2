@@ -13,3 +13,4 @@ bin/
 tmp_tt/
 tmp_worker/
 node_modules/
+!tests/e2e/corpus.json

@@ -1,0 +1,20 @@
+{
+  "name": "bot-v2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Bot de WhatsApp (Baileys) modular: plugins por categoría, sub-bots, descargas, economía y más",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node tests/e2e/check.js",
+    "test:update": "node tests/e2e/check.js --update"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "axios": ">=1",
+    "pino": ">=8",
+    "qrcode": ">=1",
+    "sharp": ">=0.33"
+  }
+}

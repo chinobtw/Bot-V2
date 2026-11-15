@@ -2,7 +2,7 @@
 // npm run test:update -> reescribe los golden con lo que hace el bot ahora (solo si el cambio de comportamiento es a propósito)
 const { spawnSync } = require('child_process'), fs = require('fs'), path = require('path'), os = require('os');
 const update = process.argv.includes('--update');
-const norm = t => t.split('\n').filter(Boolean).map(l => l.replace(/"fileName":"[A-Za-z0-9_.-]*\.js"/, '"fileName":"X.js"')).sort().join('\n') + '\n';
+const norm = t => t.split('\n').filter(Boolean).map(l => l.replace(/"fileName":"[A-Za-z0-9_.-]*\.js"/, '"fileName":"X.js"').replace(/"id":"S\d+"/g, '"id":"S"').replace(/> \d+ ms/g, '> N ms').replace(/Bot-backup-[\d-]+\.zip/, 'Bot-backup.zip').replace(/"url":"[^"]*tmp_backup\.zip"/, '"url":"tmp_backup.zip"').replace(/\(\d+ archivos, [\d.]+ MB\)/, '(N archivos, X MB)')).sort().join('\n') + '\n';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-test-'));
 let fallas = 0;
 for (const [nombre, script, golden, extra] of [['bot (todos los comandos)', 'run.js', 'golden.log', []], ['worker de descargas', 'wrun.js', 'golden-worker.log', [String(18200 + Math.floor(Math.random() * 500))]]]) {

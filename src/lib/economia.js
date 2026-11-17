@@ -4,7 +4,7 @@ const { currency } = require('./identidad');
 const { idsDe, num, senderIds, sock } = require('./state');
 
 // comandos de la economía (para poder apagarla por grupo con /economy off)
-const ECO_RE = /^\/(daily|w|work|crime|delito|minar|hacking|rob|dep|d|deposit|depositar|with|retirar|withdraw|bal|balance|rt|roulette|ruleta|cf|coinflip|bj|blackjack|maq|maquinita|pay|givecoins|coinsgive|baltop|economyboard|eboard|economyinfo|einfo)(\s|$)/i;
+const ECO_RE = /^\/(daily|w|work|crime|delito|minar|hacking|rob|dep|d|deposit|depositar|with|retirar|withdraw|bal|balance|rt|roulette|ruleta|cf|coinflip|bj|blackjack|maq|maquinita|pay|givecoins|coinsgive|baltop|economyboard|eboard|economyinfo|einfo|dados|dice|loteria|lotería|lottery|prestamo|préstamo|loan)(\s|$)/i;
 
 const DAILY_BASE = 30000, DAILY_PASO = 5000, DAILY_MAX = 500000;
 const AR_OFFSET = 3 * 3600e3;                                            // Argentina: UTC-3, sin horario de verano

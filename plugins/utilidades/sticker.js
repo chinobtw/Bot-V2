@@ -9,6 +9,7 @@ const {
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const { socMetaDe } = require('../../src/lib/cumple');
+const { rxLimpio } = require('../../src/lib/nombres');
 const { sharp } = require('../../src/lib/optional');
 const { als, senderIds, sock } = require('../../src/lib/state');
 const { webpConMeta } = require('../../src/lib/webp');
@@ -73,13 +74,20 @@ function stickerHijo(padre, m, jid) {
   if (!item || item.hecho) return;
   item.hecho = true;
   cola(jid, async () => {
-    try { await enviarSticker(jid, m, null, socMetaDe(senderIds(m, jid))); }
+    try { await enviarSticker(jid, m, null, cfg.meta || socMetaDe(senderIds(m, jid))); }
     catch (e) { item.hecho = false; console.error('[sticker]', e.message); }
     await sleepMs(500);
   });
 }
 
-async function stickerCmd(m, jid) {
+// /spack: igual que /s pero todos los stickers salen con el mismo nombre de pack y autor ("/spack Mi pack | Autor")
+const limpio = t => String(t || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 40);
+function metaSpack(m, jid, args) {
+  const base = socMetaDe(senderIds(m, jid)), nombre = rxLimpio(m.pushName), [p, ...r] = args.split('|');
+  return { pack: limpio(p) || base?.pack || `Pack de ${nombre || 'stickers'}`, autor: limpio(r.join('|')) || base?.autor || nombre || '' };
+}
+
+async function stickerCmd(m, jid, packMeta) {
   const reply = t => sock.sendMessage(jid, { text: t }, { quoted: m });
   if (!sharp) { console.error('[sharp] falta el paquete (npm i sharp)'); return reply('❌ No pude crear el sticker ahora. Probá de nuevo más tarde'); }
   const ctx = m.message.extendedTextMessage?.contextInfo;
@@ -89,7 +97,7 @@ async function stickerCmd(m, jid) {
   if (m.message.imageMessage) {
     const padre = albumPadre(m);
     if (padre) { // foto de un álbum con /s: se hacen todas las del álbum y las que lleguen después
-      albumsSticker.set(padre, { jid, hasta: Date.now() + 2 * 60e3 });
+      albumsSticker.set(padre, { jid, hasta: Date.now() + 2 * 60e3, meta: packMeta });
       fuentes = (albumCache.get(padre)?.items || []).filter(i =>!i.hecho);
       if (!fuentes.some(i => i.m.key.id === m.key.id)) fuentes.push({ m, hecho: false });
     } else fuentes = [{ m, hecho: false }];
@@ -99,15 +107,15 @@ async function stickerCmd(m, jid) {
     fuentes = a.items.slice();
   } else if (q?.imageMessage) { // respondiendo a una foto
     fuentes = [{ m: { key: { remoteJid: jid, id: ctx.stanzaId, participant: ctx.participant }, message: q }, hecho: false }];
-  } else return reply('Respondé a una foto con /s, o mandá una foto con el texto /s.\n(Si respondés a un álbum, convierto todas las fotos.)');
+  } else return reply(packMeta? 'Respondé a un álbum o a una foto con /spack Nombre del pack | Autor, o mandá las fotos con ese texto.' : 'Respondé a una foto con /s, o mandá una foto con el texto /s.\n(Si respondés a un álbum, convierto todas las fotos.)');
 
   fuentes.sort((x, y) => orden(x) - orden(y));
   const recortado = fuentes.length > MAX_STICKERS;
   if (recortado) fuentes = fuentes.slice(0, MAX_STICKERS);
   fuentes.forEach(f => { f.hecho = true; });
-  if (fuentes.length > 1) await reply(`🖼️ Armando ${fuentes.length} stickers${recortado? ` (máximo ${MAX_STICKERS} por pedido)` : ''}...`);
+  if (fuentes.length > 1) await reply(`🖼️ Armando ${fuentes.length} stickers${packMeta? ` del pack *${packMeta.pack}*` : ''}${recortado? ` (máximo ${MAX_STICKERS} por pedido)` : ''}...`);
 
-  const metaSt = socMetaDe(senderIds(m, jid));   // pack y autor del que pidió el sticker (/setmeta)
+  const metaSt = packMeta || socMetaDe(senderIds(m, jid));   // pack y autor: los de /spack o, si no, los del que pidió el sticker (/setmeta)
   cola(jid, async () => {
     let n = 0, fallas = 0;
     for (const f of fuentes) {
@@ -118,7 +126,10 @@ async function stickerCmd(m, jid) {
     if (fallas) sock.sendMessage(jid, { text: `⚠️ No pude convertir ${fallas} imagen(es).` }, { quoted: m }).catch(() => {});
   });
 }
-const CMD_STICKER = [{ test: c => /^\/s(\s|$)/i.test(c.cap || c.text), run: c => stickerCmd(c.m, c.jid) }];
+const CMD_STICKER = [
+  { test: c => /^\/s(\s|$)/i.test(c.cap || c.text), run: c => stickerCmd(c.m, c.jid) },
+  { test: c => /^\/(spack|stickerpack)(\s|$)/i.test(c.cap || c.text), run: c => stickerCmd(c.m, c.jid, metaSpack(c.m, c.jid, (c.cap || c.text).replace(/^\/\S+\s*/, ''))) },
+];
 
-module.exports = { albumPadre, albumsSticker, guardarAlbum, stickerHijo };
+module.exports = { aSticker, albumPadre, albumsSticker, guardarAlbum, stickerHijo };
 module.exports.commands = [...CMD_STICKER];

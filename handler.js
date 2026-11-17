@@ -2,6 +2,7 @@
 const { esBaneado, modPuede } = require('./plugins/admin/moderacion');
 const { isMuted } = require('./plugins/admin/mute');
 const { SH_VIEJO, shEdad, shEsComando, shHechos, shellCmd } = require('./plugins/owner/shell');
+const { afkVer } = require('./plugins/admin/afk');
 const { antilinkVer } = require('./plugins/social/antilink');
 const { albumPadre, albumsSticker, guardarAlbum, stickerHijo } = require('./plugins/utilidades/sticker');
 const { mdr } = require('./src/db/moderacion');
@@ -11,6 +12,7 @@ const { ECO_RE, ecoTocar } = require('./src/lib/economia');
 const { inicialDe, soyElElegido } = require('./src/lib/eleccion');
 const { rxGuardarNombre } = require('./src/lib/nombres');
 const { normalizar, prefijo } = require('./src/lib/prefijo');
+const { prestamoEmbargo } = require('./src/lib/prestamos');
 const { ctxBot, isOwner, sock } = require('./src/lib/state');
 const { COMANDOS, RESPUESTAS } = require('./src/plugins');
 
@@ -27,6 +29,7 @@ async function handleUpsert(messages) {
       }
       if (enGrupo && elegido) {   // actividad (mensajes y XP) y antilink: los atiende un solo bot por grupo
         try { actContar(m, jid); } catch (e) { console.error('[act]', e.message); }
+        if (!m.key.fromMe) { try { await afkVer(m, jid); } catch (e) { console.error('[afk]', e.message); } }
         if (grp[jid]?.antilink && !m.key.fromMe) { try { if (await antilinkVer(m, jid)) continue; } catch (e) { console.error('[antilink]', e.message); } }
       }
       // "$ comando": shell del host, solo el dueño. Lo ejecuta un solo bot (el elegido del grupo) y nunca un mensaje viejo o repetido
@@ -48,7 +51,7 @@ async function handleUpsert(messages) {
       const padre = albumPadre(m);
       if (padre && m.message.imageMessage) {
         guardarAlbum(padre, m, jid);
-        if (!/^\/s(\s|$)/i.test(cap) && albumsSticker.has(padre)) { stickerHijo(padre, m, jid); continue; }
+        if (!/^\/(s|spack|stickerpack)(\s|$)/i.test(cap) && albumsSticker.has(padre)) { stickerHijo(padre, m, jid); continue; }
       }
       // quién responde: con inicial (ej: J/s) solo el bot cuyo nombre empieza con esa letra; sin inicial, el más viejo entre los que tienen ese mismo prefijo
       if (!m.key.fromMe && esBaneado(m, jid)) continue;   // baneado: el bot lo ignora en todos lados
@@ -71,7 +74,7 @@ async function handleUpsert(messages) {
       if (enGrupo && mdr.onlyadmin[jid] && (text.startsWith('/') || cap.startsWith('/')) && !(await modPuede(m, jid))) continue;   // /onlyadmin: solo admins usan el bot
       if (enGrupo && grp[jid]?.noeco && ECO_RE.test(text)) { await sock.sendMessage(jid, { text: '🚫 La economía está desactivada en este grupo.' }, { quoted: m }).catch(() => {}); continue; }
       if (XP_RE.test(text)) { try { xpComando(m, jid); } catch (e) { console.error('[xp]', e.message); } }   // nivel global
-      if (enGrupo && text.startsWith('/')) ecoTocar(jid, m); // usar cualquier comando cuenta como "estar activo"
+      if (enGrupo && text.startsWith('/')) { ecoTocar(jid, m); try { prestamoEmbargo(jid, m); } catch (e) { console.error('[prestamo]', e.message); } } // usar cualquier comando cuenta como "estar activo"
       try {
         const c = { m, jid, text, cap, enGrupo, px };
         for (const cmd of COMANDOS) { if (cmd.test(c)) { await cmd.run(c); break; } }

@@ -7,7 +7,7 @@ Bot de WhatsApp modular (plugins por categoría), hecho con Node y [Baileys](htt
 ## Requisitos
 
 - Node.js (se recomienda 20 o más)
-- Dependencias: `@whiskeysockets/baileys`, `axios`, `pino`, `qrcode`, `sharp` (`npm i` las instala desde `package.json`)
+- Dependencias: `@whiskeysockets/baileys`, `axios`, `pino`, `qrcode`, `sharp`, `jsqr` (`npm i` las instala desde `package.json`)
 - `ffmpeg` instalado (reacciones en GIF, `/toimg`, slides de `/tt` como video)
 - Opcional: `yt-dlp` (se descarga solo), un worker de descargas aparte
 
@@ -28,11 +28,12 @@ main.js             # arranque: web, bot principal, sub-bots o worker de descarg
 handler.js          # manejador de mensajes: filtros previos y despacho a los plugins
 config.js           # configuración global: dueño, nombre, puertos, URLs, topes
 plugins/            # los comandos, agrupados por categoría
-  admin/            #   /automsj, /mute, /killinactive, moderación (close, tag, kick, warns, ban...)
+  admin/            #   /automsj, /mute, /killinactive, /afk, moderación (close, tag, kick, warns, ban...)
   apuestas/         #   /rt, /cf, /bj, /maq
   descargas/        #   /tt, /ytaudio, /ytvideo, /search, /spotify, /apk, /mf, /git, /fb /x /ig /pin
-  economia/         #   /daily, /w, /crime, /minar, /hacking, /rob, /dep, /with, /bal
-  ia/               #   /gemini
+  economia/         #   /daily, /w, /crime, /minar, /hacking, /rob, /dep, /with, /bal, /loteria, /prestamo
+  ia/               #   /gemini, /resumir
+  juegos/           #   /ppt, /tateti, /adivina, /verdad, /reto, /ship, /quien, tops, /rr
   info/             #   /menu, /infobot, /p
   nsfw/             #   /nsfw, reacciones NSFW, /r34
   owner/            #   /say, /whitelist, /backup, $ <comando>
@@ -40,7 +41,8 @@ plugins/            # los comandos, agrupados por categoría
   reacciones/       #   /hug, /pat, /slap...
   social/           #   nivel, perfil, grupo (antilink, welcome), utilidades (toimg, pfp), marry, cumpleaños
   subbots/          #   /code, /qr, /sub, /delsub
-  utilidades/       #   /s (stickers), /lyrics
+  utilidades/       #   /s, /spack, /qc (stickers), /lyrics, /tr, /tts, /ocr, /removebg, /tomp3, /tovn, /short, /qrgen, /readqr
+assets/fonts/        # DejaVu Sans (para /qc: no depende de las fuentes del host)
 src/
   plugins.js        # registro: qué plugins se cargan y en qué orden
   menu.js           # texto del menú
@@ -78,7 +80,8 @@ Las del panel tienen prioridad sobre el `.env`.
 | `NUMERO` | Número del bot principal (solo dígitos) |
 | `BOT_NAME`, `CURRENCY` | Nombre y moneda por defecto |
 | `SYLPHY_KEY`, `SYLPHY_URL` | API de Sylphy (YouTube, Spotify, F-Droid, `/nuevo`) |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | `/gemini` |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | `/gemini`, `/ocr`, `/resumir` |
+| `REMOVEBG_KEY` | `/removebg` (remove.bg, plan gratis) |
 | `YT_COOKIES`, `YTDLP_PATH`, `YT_PROXY` | YouTube con yt-dlp |
 | `COBALT_API`, `COBALT_KEY` | Respaldo de YouTube |
 | `WORKER_URL`, `WORKER_KEY`, `WORKER_MODE` | Descargas en un worker aparte |
@@ -98,14 +101,15 @@ Las del panel tienen prioridad sobre el `.env`.
 
 ## Archivos que genera el bot
 
-`automsj.json`, `mutes.json`, `whitelist.json`, `nsfw.json`, `nombres.json`, `moderacion.json`, `actividad.json`, `grupos.json`, `perfiles.json` (perfiles y nivel global), `settings.json`, `subbots.json`, `gemini.json`, `economia.json`. El comando `/backup` los manda al privado del creador.
+`automsj.json`, `mutes.json`, `whitelist.json`, `nsfw.json`, `nombres.json`, `moderacion.json`, `actividad.json`, `grupos.json`, `perfiles.json` (perfiles y nivel global), `settings.json`, `subbots.json`, `gemini.json`, `economia.json`, `loteria.json`, `prestamos.json`, `afk.json`. El comando `/backup` los manda al privado del creador.
 
 ## Comandos principales
 
 - **Descargas:** `/tt`, `/ytaudio`, `/ytvideo`, `/search`, `/spotify`, `/apk`, `/mf`, `/git` (`/git usuario/repo` baja la rama main; `/git -list usuario` lista sus repos), `/fb`, `/x`, `/ig`, `/pin`
-- **Stickers y utilidades:** `/s`, `/toimg`, `/setmeta`, `/pfp`
+- **Stickers y utilidades:** `/s`, `/spack`, `/qc`, `/toimg`, `/setmeta`, `/pfp`, `/tr`, `/tts`, `/ocr`, `/removebg`, `/tomp3`, `/tovn`, `/short`, `/qrgen`, `/readqr`, `/afk`
+- **Juegos:** `/ppt`, `/tateti`, `/adivina`, `/verdad`, `/reto`, `/pregunta`, `/ship`, `/quien`, `/topgay` y otros tops, `/rr`, `/consejo`
 - **Perfil y nivel:** `/profile`, `/level`, `/top`, `/marry`, `/msgcount`
-- **Economía y apuestas:** `/daily`, `/w`, `/crime`, `/rob`, `/dep`, `/with`, `/pay`, `/rt`, `/cf`, `/bj`, `/maq`
+- **Economía y apuestas:** `/daily`, `/w`, `/crime`, `/rob`, `/dep`, `/with`, `/pay`, `/loteria`, `/prestamo`, `/rt`, `/cf`, `/bj`, `/maq`, `/dados`
 - **Administración de grupo:** `/mute`, `/warn`, `/kick`, `/antilink`, `/welcome`, `/onlyadmin`, `/automsj`
 - **Reacciones:** `/hug`, `/pat`, `/slap` y más (los NSFW van aparte y se activan con `/nsfw on`)
 

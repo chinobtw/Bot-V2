@@ -190,6 +190,12 @@ function buildMenu({ botName, system, user, totalCommands, owner }) {
 │ $ /baltop | /economyboard | /eboard <página> - Ranking de plata del grupo
 │
 │ $ /economyinfo | /einfo - Tu plata, puesto, racha y tiempos de espera
+│
+│ $ /loteria | /lottery - Lotería del grupo: boletos de $5.000 y un admin sortea el pozo
+> Uso: /loteria comprar 3 · /loteria sortear (solo admins)
+│
+│ $ /prestamo | /loan <monto> - Pedir plata al banco (hasta $100.000, 10% de interés, 3 días)
+> Uso: /prestamo 50000 · /prestamo pagar all. Si vence, el banco lo cobra solo
 ╰───────────
 
 ╭─[ ✧ APUESTAS ]
@@ -202,6 +208,8 @@ function buildMenu({ botName, system, user, totalCommands, owner }) {
 > Respondé al mensaje con get (carta) o stand (plantarte)
 │
 │ $ /maq | /maquinita <monto|all> - La maquinita
+│
+│ $ /dados | /dice <monto|all> - Tirar dos dados: si salen iguales ganás x3
 ╰───────────
 
 ╭─[ ✧ AI / TOOLS ]
@@ -210,6 +218,62 @@ function buildMenu({ botName, system, user, totalCommands, owner }) {
 │
 │ $ /lyrics | /letra - Buscar letra
 > Uso: /lyrics The Weeknd - Blinding Lights
+│
+│ $ /resumir - Resumir un mensaje largo (respondiendo a él)
+╰───────────
+
+╭─[ ✧ UTILIDADES ]
+│ $ /spack | /stickerpack Nombre | Autor - Convertir un álbum de fotos en stickers con el mismo pack
+│
+│ $ /qc | /quote - Sticker con la burbuja de un mensaje (respondiendo a él)
+> Los emojis no salen en la burbuja
+│
+│ $ /tomp3 - Pasar un audio o video a mp3
+│
+│ $ /tovn - Pasar un audio o video a nota de voz
+│
+│ $ /removebg - Sacar el fondo de una foto (sale como archivo PNG)
+│
+│ $ /ocr - Sacar el texto de una foto
+│
+│ $ /tr | /translate <idioma> - Traducir respondiendo a un mensaje
+> Uso: /tr en · /tr pt hola, ¿cómo andás? Sin idioma traduce al español
+│
+│ $ /tts | /voz <texto> - Pasar un texto a audio
+> Uso: /tts hola a todos · /tts en hello everyone
+│
+│ $ /short | /acortar <link> - Acortar un link
+│
+│ $ /qrgen | /qrcode <texto> - Crear un QR
+│
+│ $ /readqr - Leer el QR de una foto
+│
+│ $ /afk motivo - Avisar que no estás: el bot contesta cuando te mencionan
+╰───────────
+
+╭─[ ✧ JUEGOS ]
+│ $ /ppt <piedra|papel|tijera> - Piedra, papel o tijera contra el bot
+│
+│ $ /tateti | /tictactoe @usuario - Tatetí en el grupo (sin @ jugás contra el bot)
+> Se juega respondiendo al tablero con un número del 1 al 9. /tateti stop lo cancela
+│
+│ $ /adivina - Adivinar el número del 1 al 100 (se responde al mensaje del juego)
+│
+│ $ /verdad - Una pregunta de verdad
+│
+│ $ /reto - Un reto
+│
+│ $ /pregunta | /preferis - ¿Qué preferís?
+│
+│ $ /ship @persona - Compatibilidad entre dos personas (o @uno @otro)
+│
+│ $ /quien <algo> - ¿Quién es más probable que...? Elige a alguien del grupo
+│
+│ $ /topgay | /toplindos | /toptrolls | /topvagos | /topcracks | /topchamuyeros - Tops de joda del grupo
+│
+│ $ /rr | /ruletarusa - Ruleta rusa: si te toca la bala, mute de 10 minutos
+│
+│ $ /consejo - Un consejo random
 ╰───────────
 
 ╭─[ ✧ PERSONALIZACIÓN ]

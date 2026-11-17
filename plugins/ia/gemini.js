@@ -1,23 +1,13 @@
 // /gemini: IA con memoria por grupo y usuario
 const axios = require('axios');
-const fs = require('fs');
 const { puedePersonalizar } = require('../personalizar/index');
 const { gem, saveGem } = require('../../src/db/gemini');
+const { GEM_MODEL, geminiKey } = require('../../src/lib/ia');
 const { ctxBot, isAdmin, senderIds, sock } = require('../../src/lib/state');
 
-const GEM_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest';
 const GEM_TURNOS = 10;      // pares pregunta/respuesta que recuerda por grupo y usuario
 const GEM_MAX_MEM = 300;    // máximo de conversaciones guardadas (se borran las más viejas)
 const GEM_SISTEMA = 'Sos un asistente dentro de WhatsApp. Respondé en el idioma de quien escribe (por defecto español rioplatense), claro y breve (máximo ~1500 caracteres). Usá el formato de WhatsApp: *negrita*, _cursiva_ y listas con "-". Sin títulos con # ni tablas.';
-// la key puede estar como GEMINI_API_KEY o GOOGLE_API_KEY, en las variables del panel o en un archivo .env
-function geminiKey() {
-  const e = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (e) return e.trim();
-  try {
-    const m = fs.readFileSync('./.env', 'utf8').match(/^\s*(?:export\s+)?(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*(.+?)\s*$/m);
-    return m? m[1].replace(/^["']|["']$/g, '') : '';
-  } catch { return ''; }
-}
 const aWhatsapp = t => t.replace(/^\s*\*\s+/gm, '- ').replace(/^#{1,6}\s+(.+)$/gm, '*$1*').replace(/\*\*(.+?)\*\*/g, '*$1*');
 
 async function geminiCmd(m, jid, text) {
